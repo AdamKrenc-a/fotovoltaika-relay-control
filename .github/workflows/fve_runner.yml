@@ -1,8 +1,8 @@
 name: Fotovoltaika Relay Control
 on:
   schedule:
-    # Spouštět každou hodinu v 5. minutě
-    - cron: '5 * * * *'
+    # Spouštět každou hodinu ve 2. minutě
+    - cron: '2 * * * *'
   workflow_dispatch:
     # Umožnit manuální spuštění
 jobs:
