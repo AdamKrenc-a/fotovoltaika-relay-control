@@ -14,6 +14,7 @@ import os
 from typing import Dict, Any
 from datetime import datetime
 import json
+from bs4 import BeautifulSoup
 
 # Konfigurace
 PRICE_THRESHOLD = 23.0  # Prahová cena v €/MWh
@@ -25,7 +26,7 @@ SHELLY_AUTH_KEY = os.getenv('SHELLY_AUTH_KEY', 'MzQxOTU2dWlkE68406B9DA8511CF2F40
 
 def get_current_price() -> float:
     """
-    Získá aktuální spotovou cenu elektřiny z OTE.cz API.
+    Získá aktuální spotovou cenu elektřiny z OTE.cz webové stránky.
     
     Returns:
         float: Aktuální cena elektřiny v €/MWh
@@ -34,37 +35,73 @@ def get_current_price() -> float:
         Exception: Pokud není možné získat cenu pro aktuální hodinu
     """
     try:
-        # Získání dat z OTE.cz API
+        # Získání dat z OTE.cz webové stránky
+        today = datetime.now().strftime('%Y-%m-%d')
+        web_url = f"https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh?date={today}"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
         }
-        response = requests.get(OTE_API_URL, headers=headers, timeout=15)
+        print(f"🌐 Web URL: {web_url}")
+        response = requests.get(web_url, headers=headers, timeout=15)
         response.raise_for_status()
-        data = response.json()
+        
+        # Parsování HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
         
         # Získání aktuálního času
         now = datetime.now()
         current_hour = now.hour
         
         print(f"🔍 Hledám cenu pro hodinu {current_hour}:00...")
+        print(f"⏰ Aktuální čas: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🌍 Časová zóna: {now.astimezone().tzinfo}")
+        
+        # Hledání tabulky s cenami (druhá tabulka)
+        tables = soup.find_all('table')
+        if len(tables) < 2:
+            raise Exception("Nepodařilo se najít tabulku s cenami")
+        table = tables[1]  # Druhá tabulka obsahuje ceny
+        
+        print(f"📊 Dostupné ceny z webu:")
+        prices = {}
+        
+        # Parsování řádků tabulky
+        rows = table.find_all('tr')
+        
+        for i, row in enumerate(rows[1:], 1):  # Přeskočit hlavičku
+            cells = row.find_all('td')
+            if len(cells) >= 1:
+                try:
+                    # Použijeme index řádku jako hodinu (1-24)
+                    hour = i
+                    
+                    # Najdeme sloupec s cenou (první sloupec podle dat)
+                    price_text = cells[0].text.strip()
+                    
+                    if price_text and price_text != "Celkem" and price_text != "":
+                        # Odstraníme mezery a převedeme čárku na tečku
+                        price_str = price_text.replace(' ', '').replace(',', '.')
+                        price = float(price_str)
+                        prices[hour] = price
+                        print(f"  Hodina {hour}: {price:.2f} EUR/MWh")
+                except (ValueError, IndexError):
+                    continue
         
         # Hledání ceny pro aktuální hodinu
-        for point in data.get('data', {}).get('dataLine', [{}])[0].get('point', []):
-            if point.get('x') == str(current_hour):
-                # Ceny jsou v centech, převod na EUR
-                price_eur = point.get('y', 0) / 100.0
-                print(f"💰 Nalezena cena: {point.get('y')} centů = {price_eur:.2f} EUR/MWh")
-                return price_eur
-        
-        raise Exception(f"Cena pro aktuální hodinu {current_hour}:00 není dostupná")
+        if current_hour in prices:
+            price = prices[current_hour]
+            print(f"✅ Nalezena cena pro aktuální hodinu: {price:.2f} EUR/MWh")
+            return price
+        else:
+            raise Exception(f"Cena pro aktuální hodinu {current_hour}:00 není dostupná")
         
     except requests.exceptions.RequestException as e:
-        print(f"⚠️  Chyba při komunikaci s OTE.cz API: {e}")
+        print(f"⚠️  Chyba při komunikaci s OTE.cz webem: {e}")
         print("🔄 Používám simulovaná data pro testování...")
         # Fallback na simulovaná data pro testování
         return 22.7
-    except (KeyError, ValueError, json.JSONDecodeError) as e:
-        print(f"⚠️  Chyba při zpracování dat z OTE.cz API: {e}")
+    except Exception as e:
+        print(f"⚠️  Chyba při zpracování dat z OTE.cz webu: {e}")
         print("🔄 Používám simulovaná data pro testování...")
         # Fallback na simulovaná data pro testování
         return 22.7
