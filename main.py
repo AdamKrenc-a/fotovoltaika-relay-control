@@ -36,7 +36,10 @@ def get_current_price() -> float:
     """
     try:
         # Získání dat z OTE.cz webové stránky
-        today = datetime.now().strftime('%Y-%m-%d')
+        from datetime import timezone, timedelta
+        # Česká časová zóna (CEST = UTC+2, CET = UTC+1)
+        czech_tz = timezone(timedelta(hours=2))  # CEST
+        today = datetime.now(czech_tz).strftime('%Y-%m-%d')
         web_url = f"https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh?date={today}"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
@@ -48,13 +51,17 @@ def get_current_price() -> float:
         # Parsování HTML
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Získání aktuálního času
-        now = datetime.now()
+        # Získání aktuálního času v české časové zóně
+        from datetime import timezone, timedelta
+        # Česká časová zóna (CEST = UTC+2, CET = UTC+1)
+        # Pro letní čas (CEST) je offset +2 hodiny
+        czech_tz = timezone(timedelta(hours=2))  # CEST
+        now = datetime.now(czech_tz)
         current_hour = now.hour
         
-        print(f"🔍 Hledám cenu pro hodinu {current_hour}:00...")
-        print(f"⏰ Aktuální čas: {now.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"🌍 Časová zóna: {now.astimezone().tzinfo}")
+        print(f"🔍 Hledám cenu pro hodinu {current_hour}:00 (český čas)...")
+        print(f"⏰ Aktuální čas (český): {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🌍 Časová zóna: {now.tzinfo}")
         
         # Hledání tabulky s cenami (druhá tabulka)
         tables = soup.find_all('table')
@@ -139,7 +146,9 @@ def main():
     """
     print("🔌 Automatické ovládání relé pro fotovoltaiku")
     print("=" * 50)
-    print(f"⏰ Čas spuštění: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    from datetime import timezone, timedelta
+    czech_tz = timezone(timedelta(hours=2))  # CEST
+    print(f"⏰ Čas spuštění (český): {datetime.now(czech_tz).strftime('%Y-%m-%d %H:%M:%S')}")
     
     # Získání aktuální ceny elektřiny
     try:
