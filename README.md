@@ -1,6 +1,6 @@
-# Automatické ovládání relé pro fotovoltaiku
+# fotovoltaika-relay-control
 
-Skript pro automatické ovládání relé podle aktuální ceny elektřiny z OTE.cz API.
+Automatické ovládání relé pro fotovoltaiku podle ceny elektřiny z OTE.cz API.
 
 ## Funkce
 
@@ -52,4 +52,4 @@ Skript je nakonfigurován pro:
 - Ceny jsou získávány v centech a automaticky převáděny na EUR
 - Při chybě OTE.cz API se použijí simulovaná data (22.7 €/MWh) pro testování
 - Logy se zapisují do konzole s časovými razítky
-- Skript je připraven pro produkční nasazení s cron úlohou 
+- Skript je připraven pro produkční nasazení s cron úlohou
