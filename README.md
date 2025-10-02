@@ -26,15 +26,21 @@ python3 main.py
 
 ## Automatické spouštění
 
-Pro automatické spouštění každou hodinu použijte cron:
+Pro automatické spouštění každou hodinu ve 2. minutě použijte cron:
 
 ```bash
 # Otevřete crontab editor
 crontab -e
 
-# Přidejte řádek pro spouštění každou hodinu
-0 * * * * cd /cesta/k/skriptu && python3 main.py >> /var/log/fotovoltaika.log 2>&1
+# Přidejte řádek pro spouštění každou hodinu ve 2. minutě
+2 * * * * cd /cesta/k/skriptu && python3 main.py >> /var/log/fotovoltaika.log 2>&1
 ```
+
+### GitHub Actions
+
+Skript je také nakonfigurován pro spouštění přes GitHub Actions každou hodinu ve 2. minutě.
+
+**⚠️ Poznámka:** GitHub Actions může mít zpoždění kvůli frontě runnerů. Skript se může spustit s několika minutovým zpožděním od naplánovaného času.
 
 ## Konfigurace
 

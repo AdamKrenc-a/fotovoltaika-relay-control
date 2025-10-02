@@ -3,9 +3,9 @@
 Automatické ovládání relé pro fotovoltaiku podle ceny elektřiny.
 Skript kontroluje aktuální cenu elektřiny z OTE.cz API a podle ní zapíná/vypíná relé.
 
-Cron úloha pro spouštění každou hodinu:
-# Spouštět skript každou hodinu
-0 * * * * cd /cesta/k/skriptu && python3 main.py >> /var/log/fotovoltaika.log 2>&1
+Cron úloha pro spouštění každou hodinu ve 2. minutě:
+# Spouštět skript každou hodinu ve 2. minutě
+2 * * * * cd /cesta/k/skriptu && python3 main.py >> /var/log/fotovoltaika.log 2>&1
 """
 
 import requests
@@ -13,12 +13,12 @@ import sys
 import os
 from typing import Dict, Any
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import json
-from bs4 import BeautifulSoup
 
 # Konfigurace
 PRICE_THRESHOLD = 23.0  # Prahová cena v €/MWh
-OTE_API_URL = "https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data"
+OTE_API_URL = "https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data"  # JSON API endpoint
 SHELLY_API_URL = "https://shelly-193-eu.shelly.cloud/device/relay/control"
 SHELLY_DEVICE_ID = os.getenv('SHELLY_DEVICE_ID', '2cbcbba4373c')
 SHELLY_AUTH_KEY = os.getenv('SHELLY_AUTH_KEY', 'MzQxOTU2dWlkE68406B9DA8511CF2F40693C563A099F43A2992A3FCF1C2D6E26CC980FDAD353C2A4A6F09E0D1705')
@@ -26,7 +26,7 @@ SHELLY_AUTH_KEY = os.getenv('SHELLY_AUTH_KEY', 'MzQxOTU2dWlkE68406B9DA8511CF2F40
 
 def get_current_price() -> float:
     """
-    Získá aktuální spotovou cenu elektřiny z OTE.cz webové stránky.
+    Získá aktuální spotovou cenu elektřiny z OTE.cz API.
     
     Returns:
         float: Aktuální cena elektřiny v €/MWh
@@ -35,27 +35,20 @@ def get_current_price() -> float:
         Exception: Pokud není možné získat cenu pro aktuální hodinu
     """
     try:
-        # Získání dat z OTE.cz webové stránky
-        from datetime import timezone, timedelta
-        # Česká časová zóna (CEST = UTC+2, CET = UTC+1)
-        czech_tz = timezone(timedelta(hours=2))  # CEST
-        today = datetime.now(czech_tz).strftime('%Y-%m-%d')
-        web_url = f"https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh?date={today}"
+        # Získání dat z OTE.cz API
+        api_url = "https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
         }
-        print(f"🌐 Web URL: {web_url}")
-        response = requests.get(web_url, headers=headers, timeout=15)
+        print(f"🌐 API URL: {api_url}")
+        response = requests.get(api_url, headers=headers, timeout=15)
         response.raise_for_status()
         
-        # Parsování HTML
-        soup = BeautifulSoup(response.content, 'html.parser')
+        # Parsování JSON dat
+        data = response.json()
         
         # Získání aktuálního času v české časové zóně
-        from datetime import timezone, timedelta
-        # Česká časová zóna (CEST = UTC+2, CET = UTC+1)
-        # Pro letní čas (CEST) je offset +2 hodiny
-        czech_tz = timezone(timedelta(hours=2))  # CEST
+        czech_tz = ZoneInfo("Europe/Prague")
         now = datetime.now(czech_tz)
         current_hour = now.hour
         
@@ -63,52 +56,45 @@ def get_current_price() -> float:
         print(f"⏰ Aktuální čas (český): {now.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"🌍 Časová zóna: {now.tzinfo}")
         
-        # Hledání tabulky s cenami (druhá tabulka)
-        tables = soup.find_all('table')
-        if len(tables) < 2:
-            raise Exception("Nepodařilo se najít tabulku s cenami")
-        table = tables[1]  # Druhá tabulka obsahuje ceny
+        # Hledání hodinových cen (60min cena) v JSON datech
+        hourly_prices = {}
         
-        print(f"📊 Dostupné ceny z webu:")
-        prices = {}
-        
-        # Parsování řádků tabulky
-        rows = table.find_all('tr')
-        
-        for i, row in enumerate(rows[1:], 1):  # Přeskočit hlavičku
-            cells = row.find_all('td')
-            if len(cells) >= 1:
-                try:
-                    # Použijeme index řádku jako hodinu (1-24)
-                    hour = i
-                    
-                    # Najdeme sloupec s cenou (první sloupec podle dat)
-                    price_text = cells[0].text.strip()
-                    
-                    if price_text and price_text != "Celkem" and price_text != "":
-                        # Odstraníme mezery a převedeme čárku na tečku
-                        price_str = price_text.replace(' ', '').replace(',', '.')
-                        price = float(price_str)
-                        prices[hour] = price
+        # Procházíme všechny datové řady
+        for data_line in data.get('data', {}).get('dataLine', []):
+            # Hledáme řadu s hodinovou cenou (60min cena)
+            if data_line.get('title') == '60min cena (EUR/MWh)':
+                print(f"📊 Dostupné hodinové ceny z API:")
+                
+                # Zpracováváme body dat
+                for point in data_line.get('point', []):
+                    try:
+                        # x je hodina (1-24), y je cena
+                        hour = int(point['x'])
+                        price = float(point['y'])
+                        hourly_prices[hour] = price
                         print(f"  Hodina {hour}: {price:.2f} EUR/MWh")
-                except (ValueError, IndexError):
-                    continue
+                    except (ValueError, KeyError):
+                        continue
+                break
+        
+        if not hourly_prices:
+            raise Exception("Nepodařilo se najít hodinové ceny v API odpovědi")
         
         # Hledání ceny pro aktuální hodinu
-        if current_hour in prices:
-            price = prices[current_hour]
+        if current_hour in hourly_prices:
+            price = hourly_prices[current_hour]
             print(f"✅ Nalezena cena pro aktuální hodinu: {price:.2f} EUR/MWh")
             return price
         else:
             raise Exception(f"Cena pro aktuální hodinu {current_hour}:00 není dostupná")
         
     except requests.exceptions.RequestException as e:
-        print(f"⚠️  Chyba při komunikaci s OTE.cz webem: {e}")
+        print(f"⚠️  Chyba při komunikaci s OTE.cz API: {e}")
         print("🔄 Používám simulovaná data pro testování...")
         # Fallback na simulovaná data pro testování
         return 22.7
     except Exception as e:
-        print(f"⚠️  Chyba při zpracování dat z OTE.cz webu: {e}")
+        print(f"⚠️  Chyba při zpracování dat z OTE.cz API: {e}")
         print("🔄 Používám simulovaná data pro testování...")
         # Fallback na simulovaná data pro testování
         return 22.7
@@ -146,9 +132,33 @@ def main():
     """
     print("🔌 Automatické ovládání relé pro fotovoltaiku")
     print("=" * 50)
+    
+    # Logování času spouštění v různých časových zónách
     from datetime import timezone, timedelta
-    czech_tz = timezone(timedelta(hours=2))  # CEST
-    print(f"⏰ Čas spuštění (český): {datetime.now(czech_tz).strftime('%Y-%m-%d %H:%M:%S')}")
+    import time
+    
+    # UTC čas
+    utc_now = datetime.now(timezone.utc)
+    print(f"⏰ Čas spuštění (UTC): {utc_now.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Česká časová zóna (automaticky CET/CEST)
+    czech_tz = ZoneInfo("Europe/Prague")
+    czech_now = datetime.now(czech_tz)
+    print(f"⏰ Čas spuštění (český): {czech_now.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Unix timestamp
+    print(f"⏰ Unix timestamp: {int(time.time())}")
+    
+    # Informace o očekávaném čase spouštění
+    expected_minute = 2  # Očekáváme spouštění ve 2. minutě každé hodiny
+    actual_minute = czech_now.minute
+    print(f"📅 Očekávaný čas spouštění: každou hodinu ve {expected_minute}. minutě")
+    print(f"📅 Skutečný čas spouštění: {actual_minute}. minuta")
+    
+    if actual_minute != expected_minute:
+        print(f"⚠️  POZOR: Skript se spustil v {actual_minute}. minutě místo očekávané {expected_minute}. minuty!")
+    else:
+        print(f"✅ Skript se spustil ve správný čas ({expected_minute}. minuta)")
     
     # Získání aktuální ceny elektřiny
     try:

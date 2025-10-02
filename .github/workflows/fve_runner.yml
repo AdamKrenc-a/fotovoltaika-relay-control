@@ -1,10 +1,12 @@
 name: Fotovoltaika Relay Control
 on:
   schedule:
-    # Spouštět každou hodinu ve 2. minutě
+    # Spouštět každou hodinu ve 2. minutě (cron format: minuta hodina den měsíc den_v_týdnu)
     - cron: '2 * * * *'
   workflow_dispatch:
     # Umožnit manuální spuštění
+  repository_dispatch:
+    types: [run_fve]
 jobs:
   run-fve-script:
     runs-on: ubuntu-latest
@@ -18,18 +20,57 @@ jobs:
       with:
         python-version: '3.10'
         
+    - name: Print current times (UTC and Europe/Prague)
+      run: |
+        echo "=== TIMING DEBUG ==="
+        echo "UTC: $(date -u)"
+        echo "Prague: $(TZ='Europe/Prague' date)"
+        echo "Prague minute: $(TZ='Europe/Prague' date +%M)"
+        echo "Expected: Every hour at minute 2 (Prague time)"
+        echo "=================="
+
+    # Zarovnání startu na :02 (Europe/Prague) pokud runner dorazil předčasně
+    # GitHub Actions cron běží v UTC, takže musíme počkat na správný čas v Praze
+    - name: Align start to :02 (Europe/Prague)
+      run: |
+        PRAGUE_MIN=$(TZ='Europe/Prague' date +%M)
+        PRAGUE_SEC=$(TZ='Europe/Prague' date +%S)
+        echo "Current Prague time: $(TZ='Europe/Prague' date)"
+        echo "Current Prague minute: $PRAGUE_MIN, second: $PRAGUE_SEC"
+        
+        if [ "$PRAGUE_MIN" -eq 1 ]; then
+          # Pokud je :01, počkáme do :02
+          SECS_TO_WAIT=$(( 60 - PRAGUE_SEC ))
+          echo "Waiting $SECS_TO_WAIT seconds to reach :02 Europe/Prague"
+          sleep $SECS_TO_WAIT
+        elif [ "$PRAGUE_MIN" -eq 0 ]; then
+          # Pokud je :00, počkáme 2 minuty
+          SECS_TO_WAIT=$(( 120 - PRAGUE_SEC ))
+          echo "Waiting $SECS_TO_WAIT seconds to reach :02 Europe/Prague"
+          sleep $SECS_TO_WAIT
+        else
+          echo "Already past :02, running immediately"
+        fi
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install beautifulsoup4 requests
+        pip install requests
         echo "Installed packages:"
         pip list
-        echo "Testing bs4 import:"
-        python -c "import bs4; print('bs4 imported successfully')"
+        echo "Testing requests import:"
+        python -c "import requests; print('requests imported successfully')"
         
     - name: Run FVE script
       env:
         SHELLY_AUTH_KEY: ${{ secrets.SHELLY_AUTH_KEY }}
         SHELLY_DEVICE_ID: ${{ secrets.SHELLY_DEVICE_ID }}
       run: |
+        echo "🚀 GitHub Actions workflow spuštěn"
+        echo "⏰ Čas spuštění (UTC): $(date -u)"
+        echo "⏰ Čas spuštění (Prague): $(TZ='Europe/Prague' date)"
+        echo "📅 Očekávaný čas: každou hodinu ve 2. minutě"
+        echo "🔍 Aktuální minuta v Praze: $(TZ='Europe/Prague' date +%M)"
+        echo "✅ Správně spuštěno ve 2. minutě: $([ $(TZ='Europe/Prague' date +%M) -eq 2 ] && echo "ANO" || echo "NE")"
+        echo "🔍 Spouštím main.py..."
         python main.py
