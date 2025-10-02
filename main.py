@@ -35,12 +35,15 @@ def get_current_price() -> float:
         Exception: Pokud není možné získat cenu pro aktuální hodinu
     """
     try:
-        # Získání dat z OTE.cz API
-        api_url = "https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data"
+        # Získání dat z OTE.cz API pro aktuální den
+        czech_tz = ZoneInfo("Europe/Prague")
+        today = datetime.now(czech_tz).strftime('%Y-%m-%d')
+        api_url = f"https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data?date={today}"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
         }
         print(f"🌐 API URL: {api_url}")
+        print(f"📅 Datum: {today}")
         response = requests.get(api_url, headers=headers, timeout=15)
         response.raise_for_status()
         
