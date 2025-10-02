@@ -57,23 +57,35 @@ def get_current_price() -> float:
         print(f"🌍 Časová zóna: {now.tzinfo}")
         
         # Hledání hodinových cen (60min cena) v JSON datech
+        # Poznámka: API vrací 15minutové intervaly (96 bodů = 24 hodin)
         hourly_prices = {}
         
         # Procházíme všechny datové řady
         for data_line in data.get('data', {}).get('dataLine', []):
             # Hledáme řadu s hodinovou cenou (60min cena)
             if data_line.get('title') == '60min cena (EUR/MWh)':
-                print(f"📊 Dostupné hodinové ceny z API:")
+                print(f"📊 Dostupné hodinové ceny z API (15min intervaly):")
                 
-                # Zpracováváme body dat
-                for point in data_line.get('point', []):
+                # Zpracováváme body dat - každé 4 body = 1 hodina
+                points = data_line.get('point', [])
+                for i in range(0, len(points), 4):  # Každé 4 body = 1 hodina
                     try:
-                        # x je hodina (1-24), y je cena
-                        hour = int(point['x'])
-                        price = float(point['y'])
+                        # Hodina je index/4 + 1 (0-3 = hodina 1, 4-7 = hodina 2, atd.)
+                        hour = (i // 4) + 1
+                        
+                        # Vezmeme první cenu z každé hodiny (nebo průměr všech 4)
+                        price = float(points[i]['y'])
+                        
                         hourly_prices[hour] = price
-                        print(f"  Hodina {hour}: {price:.2f} EUR/MWh")
-                    except (ValueError, KeyError):
+                        
+                        # Zobrazíme jen první a poslední interval každé hodiny
+                        if i + 3 < len(points):
+                            last_price = float(points[i + 3]['y'])
+                            print(f"  Hodina {hour}: {price:.2f}-{last_price:.2f} EUR/MWh (4 × 15min)")
+                        else:
+                            print(f"  Hodina {hour}: {price:.2f} EUR/MWh")
+                            
+                    except (ValueError, KeyError, IndexError):
                         continue
                 break
         
