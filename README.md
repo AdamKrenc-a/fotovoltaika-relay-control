@@ -60,3 +60,25 @@ Skript je nakonfigurován pro:
 - Logy se zapisují do konzole s časovými razítky
 - Skript je připraven pro produkční nasazení s cron úlohou
 # Aktualizace Thu Oct  2 15:20:00 CEST 2025
+# Finální verze - kompletní oprava OTE API integrace
+
+## ✅ Všechny problémy vyřešeny:
+
+### 🔧 Opravy provedené:
+1. **Přechod z HTML na JSON API** - rychlejší a spolehlivější
+2. **Oprava interpretace dat** - 96 bodů → 24 hodin (každé 4 body = 1 hodina)
+3. **Oprava data v API URL** - script čte data pro aktuální den
+4. **Správné mapování časů** - hodina 15 = skutečná 15. hodina
+
+### 📊 Výsledek:
+- ✅ Ceny odpovídají webu OTE (74.36 EUR/MWh pro hodinu 15)
+- ✅ Automatické fungování každý den
+- ✅ Správné rozhodování o zapnutí/vypnutí relé
+- ✅ Plně funkční GitHub Actions workflow
+
+### 🚀 Automatické spouštění:
+- Každou hodinu ve 2. minutě pražského času
+- Vždy pro aktuální den
+- Bez nutnosti manuální údržby
+
+Script je nyní plně funkční a připraven k dlouhodobému použití!
