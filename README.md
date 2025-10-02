@@ -59,3 +59,4 @@ Skript je nakonfigurován pro:
 - Při chybě OTE.cz API se použijí simulovaná data (22.7 €/MWh) pro testování
 - Logy se zapisují do konzole s časovými razítky
 - Skript je připraven pro produkční nasazení s cron úlohou
+# Aktualizace Thu Oct  2 15:20:00 CEST 2025
