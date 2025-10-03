@@ -27,6 +27,7 @@ SHELLY_AUTH_KEY = os.getenv('SHELLY_AUTH_KEY', 'MzQxOTU2dWlkE68406B9DA8511CF2F40
 def get_current_price() -> float:
     """
     Získá aktuální spotovou cenu elektřiny z OTE.cz API.
+    Automaticky se přizpůsobí časovým zónám a zpožděním.
     
     Returns:
         float: Aktuální cena elektřiny v €/MWh
@@ -73,8 +74,9 @@ def get_current_price() -> float:
                 points = data_line.get('point', [])
                 for i in range(0, len(points), 4):  # Každé 4 body = 1 hodina
                     try:
-                        # Hodina je index/4 + 1 (0-3 = hodina 1, 4-7 = hodina 2, atd.)
-                        hour = (i // 4) + 1
+                        # Hodina je index/4 (0-3 = hodina 0, 4-7 = hodina 1, atd.)
+                        # Opraveno: nepřidáváme +1, protože API je 0-indexované
+                        hour = i // 4
                         
                         # Vezmeme první cenu z každé hodiny (nebo průměr všech 4)
                         price = float(points[i]['y'])
@@ -84,9 +86,9 @@ def get_current_price() -> float:
                         # Zobrazíme jen první a poslední interval každé hodiny
                         if i + 3 < len(points):
                             last_price = float(points[i + 3]['y'])
-                            print(f"  Hodina {hour}: {price:.2f}-{last_price:.2f} EUR/MWh (4 × 15min)")
+                            print(f"  Hodina {hour}:00-{hour}:59: {price:.2f}-{last_price:.2f} EUR/MWh (4 × 15min)")
                         else:
-                            print(f"  Hodina {hour}: {price:.2f} EUR/MWh")
+                            print(f"  Hodina {hour}:00-{hour}:59: {price:.2f} EUR/MWh")
                             
                     except (ValueError, KeyError, IndexError):
                         continue
@@ -95,13 +97,25 @@ def get_current_price() -> float:
         if not hourly_prices:
             raise Exception("Nepodařilo se najít hodinové ceny v API odpovědi")
         
+        # Debug: zobrazíme všechny dostupné hodiny
+        print(f"🔍 Dostupné hodiny v API: {sorted(hourly_prices.keys())}")
+        print(f"🔍 Hledám cenu pro hodinu {current_hour}:00")
+        
         # Hledání ceny pro aktuální hodinu
         if current_hour in hourly_prices:
             price = hourly_prices[current_hour]
-            print(f"✅ Nalezena cena pro aktuální hodinu: {price:.2f} EUR/MWh")
+            print(f"✅ Nalezena cena pro aktuální hodinu {current_hour}:00: {price:.2f} EUR/MWh")
             return price
         else:
-            raise Exception(f"Cena pro aktuální hodinu {current_hour}:00 není dostupná")
+            # Zkusíme najít nejbližší dostupnou hodinu
+            available_hours = sorted(hourly_prices.keys())
+            if available_hours:
+                closest_hour = min(available_hours, key=lambda x: abs(x - current_hour))
+                price = hourly_prices[closest_hour]
+                print(f"⚠️  Cena pro hodinu {current_hour}:00 není dostupná, používám nejbližší {closest_hour}:00: {price:.2f} EUR/MWh")
+                return price
+            else:
+                raise Exception(f"Cena pro aktuální hodinu {current_hour}:00 není dostupná a žádné alternativy nejsou k dispozici")
         
     except requests.exceptions.RequestException as e:
         print(f"⚠️  Chyba při komunikaci s OTE.cz API: {e}")
@@ -164,16 +178,20 @@ def main():
     # Unix timestamp
     print(f"⏰ Unix timestamp: {int(time.time())}")
     
-    # Informace o očekávaném čase spouštění
+    # Informace o očekávaném čase spouštění s tolerancí
     expected_minute = 2  # Očekáváme spouštění ve 2. minutě každé hodiny
+    tolerance_minutes = 3  # Tolerujeme spuštění v rozmezí 0-5 minut
     actual_minute = czech_now.minute
-    print(f"📅 Očekávaný čas spouštění: každou hodinu ve {expected_minute}. minutě")
+    print(f"📅 Očekávaný čas spouštění: každou hodinu ve {expected_minute}. minutě (±{tolerance_minutes} min)")
     print(f"📅 Skutečný čas spouštění: {actual_minute}. minuta")
     
-    if actual_minute != expected_minute:
-        print(f"⚠️  POZOR: Skript se spustil v {actual_minute}. minutě místo očekávané {expected_minute}. minuty!")
+    # Kontrola, zda je čas v toleranci
+    time_diff = abs(actual_minute - expected_minute)
+    if time_diff > tolerance_minutes:
+        print(f"⚠️  POZOR: Skript se spustil v {actual_minute}. minutě (rozdíl {time_diff} min od očekávané {expected_minute}. minuty)")
+        print(f"⚠️  To může způsobit problémy s přesností cen elektřiny!")
     else:
-        print(f"✅ Skript se spustil ve správný čas ({expected_minute}. minuta)")
+        print(f"✅ Skript se spustil v přijatelném čase (rozdíl {time_diff} min od očekávané {expected_minute}. minuty)")
     
     # Získání aktuální ceny elektřiny
     try:

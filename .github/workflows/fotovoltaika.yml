@@ -1,0 +1,44 @@
+name: Fotovoltaika - Automatické ovládání relé
+
+on:
+  schedule:
+    # Spouštět každou hodinu ve 2. minutě (UTC čas)
+    # Poznámka: Český čas je UTC+1 (zimní) nebo UTC+2 (letní)
+    # Takže 1:02 UTC = 2:02 nebo 3:02 českého času
+    - cron: '2 * * * *'
+  workflow_dispatch:  # Umožňuje manuální spuštění
+
+jobs:
+  control-relay:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout kód
+      uses: actions/checkout@v4
+      
+    - name: Nastavení Pythonu
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Instalace závislostí
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Spuštění skriptu s časovou zónou
+      env:
+        SHELLY_DEVICE_ID: ${{ secrets.SHELLY_DEVICE_ID }}
+        SHELLY_AUTH_KEY: ${{ secrets.SHELLY_AUTH_KEY }}
+        TZ: Europe/Prague  # Nastavení české časové zóny
+      run: |
+        echo "🕐 Aktuální čas (UTC): $(date -u)"
+        echo "🕐 Aktuální čas (český): $(TZ=Europe/Prague date)"
+        echo "🕐 Čas spuštění GitHub Actions: $(date)"
+        python main.py
+        
+    - name: Uložení logů
+      if: always()
+      run: |
+        echo "📊 Workflow dokončen v: $(date)"
+        echo "📊 Časová zóna: $(date +%Z)"
